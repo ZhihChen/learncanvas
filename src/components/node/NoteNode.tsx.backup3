@@ -1,0 +1,718 @@
+'use client';
+
+/**
+ * 笔记节点组件
+ * 用于展示和管理摘录内容，支持 AI 对话
+ */
+
+import { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { toPng } from 'html-to-image';
+import '@/components/node/nodes.css';
+import { 
+  FileText, 
+  MoreVertical, 
+  Trash2, 
+  ChevronDown, 
+  ChevronUp,
+  Edit3,
+  X,
+  ExternalLink,
+  Clock,
+  Tag,
+  CheckSquare,
+  Maximize2,
+  Download,
+  Sparkles,
+  Send,
+  Loader2,
+  MessageCircle,
+} from 'lucide-react';
+import { useCanvasStore } from '@/store/canvasStore';
+import { useNoteContext } from '@/hooks/useNoteContext';
+import { MarkdownRenderer } from '@/components/chat/MarkdownRenderer';
+import type { Excerpt, NoteNodeData, Message } from '@/types';
+import { cn } from '@/lib/utils';
+
+// 生成唯一 ID
+const generateId = () => `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+// 节点默认尺寸
+const NODE_WIDTH = 420;
+const NODE_MIN_HEIGHT = 200;
+
+/**
+ * 摘录卡片组件
+ */
+const ExcerptCard = memo(({ 
+  excerpt, 
+  onJumpToSource,
+  onDelete,
+}: { 
+  excerpt: Excerpt;
+  onJumpToSource?: () => void;
+  onDelete?: () => void;
+}) => {
+  const [isExpanded, setIsExpanded] = useState(true);
+  
+  // 格式化时间
+  const formatTime = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return '刚刚';
+    if (diffMins < 60) return `${diffMins} 分钟前`;
+    if (diffHours < 24) return `${diffHours} 小时前`;
+    if (diffDays < 7) return `${diffDays} 天前`;
+    return date.toLocaleDateString('zh-CN');
+  };
+  
+  return (
+    <div className="bg-gray-50 rounded-lg border border-gray-200 overflow-hidden">
+      {/* 来源信息栏 */}
+      <div className="flex items-center justify-between px-3 py-2 bg-white border-b border-gray-100">
+        <button
+          onClick={onJumpToSource}
+          className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 transition-colors"
+        >
+          <ExternalLink className="w-3 h-3" />
+          <span>来自「{excerpt.sourceNodeTitle}」节点</span>
+        </button>
+        <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1 text-xs text-gray-500">
+            <Clock className="w-3 h-3" />
+            {formatTime(excerpt.createdAt)}
+          </span>
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            {isExpanded ? (
+              <ChevronUp className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5" />
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* 内容区 */}
+      {isExpanded && (
+        <div className="p-3">
+          {/* 摘录内容 */}
+          {excerpt.htmlContent ? (
+            <div
+              className="text-sm text-gray-800 leading-relaxed excerpt-html-content"
+              dangerouslySetInnerHTML={{ __html: excerpt.htmlContent }}
+            />
+          ) : (
+            <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+              {excerpt.content}
+            </div>
+          )}
+
+          {/* 用户笔记 */}
+          {excerpt.note && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <div className="flex items-start gap-2">
+                <Edit3 className="w-3.5 h-3.5 text-gray-500 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-gray-600 italic">
+                  {excerpt.note}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 标签 */}
+          {excerpt.tags && excerpt.tags.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-200 flex flex-wrap gap-1.5">
+              <Tag className="w-3.5 h-3.5 text-gray-500" />
+              {excerpt.tags.map((tag, index) => (
+                <span
+                  key={index}
+                  className="px-2 py-0.5 text-xs bg-blue-50 text-blue-600 rounded"
+                >
+                  #{tag}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* 操作按钮 */}
+          <div className="mt-3 pt-3 border-t border-gray-200 flex items-center gap-2">
+            {onJumpToSource && (
+              <button
+                onClick={onJumpToSource}
+                className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+              >
+                <ExternalLink className="w-3 h-3" />
+                跳转来源
+              </button>
+            )}
+            {onDelete && (
+              <button
+                onClick={onDelete}
+                className="flex items-center gap-1 px-2 py-1 text-xs text-[#787774] hover:text-[#E03E3E] hover:bg-[#FEF2F2] rounded transition-colors"
+              >
+                <Trash2 className="w-3 h-3" />
+                删除
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+ExcerptCard.displayName = 'ExcerptCard';
+
+/**
+ * 笔记节点组件
+ */
+function NoteNodeComponent({ id, data, selected }: NodeProps & { data: NoteNodeData }) {
+  const { 
+    title, 
+    excerpts = [], 
+    collapsed,
+    displayMode = 'list',
+    sortBy = 'time',
+    aiOrganized,
+  } = data;
+  
+  // 状态
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitleValue, setEditTitleValue] = useState(title);
+  const [aiMode, setAiMode] = useState(data.aiMode || false);
+  const [inputValue, setInputValue] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
+  const nodeRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  
+  const { 
+    deleteNode, 
+    updateNodeData,
+    setSelectedNode,
+    deleteExcerpt,
+    setExpandedNode,
+    nodes,
+    addNoteMessage,
+    updateNoteMessage,
+  } = useCanvasStore();
+  
+  // 获取笔记上下文（包含相连笔记的内容）
+  const { contextContent, hasConnectedNodes, buildContextText } = useNoteContext(id);
+  
+  // 获取当前笔记的对话历史
+  const messages = data.messages || [];
+  
+  // 保存标题
+  const saveTitle = useCallback(() => {
+    const trimmed = editTitleValue.trim();
+    if (trimmed && trimmed !== title) {
+      updateNodeData(id, { title: trimmed });
+    } else {
+      setEditTitleValue(title);
+    }
+    setIsEditingTitle(false);
+  }, [id, editTitleValue, title, updateNodeData]);
+  
+  // 删除摘录
+  const handleDeleteExcerpt = useCallback((excerptId: string) => {
+    deleteExcerpt(excerptId);
+  }, [deleteExcerpt]);
+  
+  // 跳转到来源节点和消息
+  const handleJumpToSource = useCallback((excerpt: Excerpt) => {
+    // 1. 选中源节点
+    setSelectedNode(excerpt.sourceNodeId);
+    
+    // 2. 打开源节点的 ExpandedChat
+    setExpandedNode(excerpt.sourceNodeId);
+    
+    // 3. 延迟滚动到消息（等待 ExpandedChat 渲染完成）
+    setTimeout(() => {
+      // 查找消息元素
+      const messageElement = document.querySelector(`[data-message-id="${excerpt.sourceMessageId}"]`);
+      if (messageElement) {
+        // 滚动到消息位置
+        messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // 添加闪烁高亮效果
+        messageElement.classList.add('excerpt-jump-highlight');
+        setTimeout(() => {
+          messageElement.classList.remove('excerpt-jump-highlight');
+        }, 2000);
+      }
+    }, 300);
+  }, [setSelectedNode, setExpandedNode]);
+  
+  // 切换 AI 模式
+  const toggleAiMode = useCallback(() => {
+    const newMode = !aiMode;
+    setAiMode(newMode);
+    updateNodeData(id, { aiMode: newMode });
+    if (newMode) {
+      // 进入 AI 模式时，聚焦输入框
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [aiMode, id, updateNodeData]);
+  
+  // 发送消息给 AI（非流式）
+  const handleSendMessage = useCallback(async () => {
+    if (!inputValue.trim() || isStreaming) return;
+    
+    const userMessage: Message = {
+      id: generateId(),
+      role: 'user',
+      content: inputValue.trim(),
+      timestamp: Date.now(),
+    };
+    
+    // 添加用户消息
+    addNoteMessage(id, userMessage);
+    setInputValue('');
+    setIsStreaming(true);
+    
+    try {
+      const response = await fetch('/api/ai/note', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nodeId: id,
+          userMessage: userMessage.content,
+          contextNotes: contextContent,
+          history: messages.slice(-10),
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('AI 请求失败');
+      }
+      
+      const data = await response.json();
+      
+      // 添加 AI 响应消息
+      const aiMessage: Message = {
+        id: generateId(),
+        role: 'assistant',
+        content: data.content || '抱歉，我无法生成回复。',
+        timestamp: Date.now(),
+      };
+      addNoteMessage(id, aiMessage);
+      
+    } catch (error) {
+      console.error('AI 对话错误:', error);
+      const errorMessage: Message = {
+        id: generateId(),
+        role: 'assistant',
+        content: '抱歉，发生了错误，请稍后重试。',
+        timestamp: Date.now(),
+      };
+      addNoteMessage(id, errorMessage);
+    } finally {
+      setIsStreaming(false);
+    }
+  }, [inputValue, isStreaming, id, addNoteMessage, contextContent, messages]);
+  
+  // 自动滚动到底部
+  useEffect(() => {
+    if (messagesContainerRef.current && aiMode) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
+  }, [messages, aiMode]);
+  
+  // 排序摘录
+  const sortedExcerpts = [...excerpts].sort((a, b) => {
+    if (sortBy === 'time') {
+      return b.createdAt - a.createdAt; // 最新的在前
+    }
+    if (sortBy === 'source') {
+      return a.sourceNodeTitle.localeCompare(b.sourceNodeTitle);
+    }
+    return 0;
+  });
+
+  return (
+    <div
+      ref={nodeRef}
+      className={cn(
+        'node-container',
+        selected && 'selected',
+        collapsed && 'min-h-0'
+      )}
+      style={{ width: NODE_WIDTH }}
+      onDoubleClick={(e) => {
+        // 如果双击的是标题区域、输入框或按钮，不触发展开
+        const target = e.target as HTMLElement;
+        if (
+          target.closest('input') ||
+          target.closest('textarea') ||
+          target.closest('button') ||
+          target.closest('[data-title-area]')
+        ) {
+          return;
+        }
+        setExpandedNode(id);
+      }}
+    >
+      {/* ===== 连接点 ===== */}
+
+      {/* 顶部输入端口 */}
+      <Handle
+        type="target"
+        position={Position.Top}
+        id="top-target"
+        style={{ top: -4 }}
+      />
+
+      {/* 底部输出端口 */}
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id="bottom-source"
+        style={{ bottom: -4 }}
+      />
+
+      {/* 左侧输入端口 */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="left-target"
+        style={{ left: -4 }}
+      />
+
+      {/* 右侧输出端口 */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="right-source"
+        style={{ right: -4 }}
+      />
+
+      {/* 节点头部 */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {/* 图标 */}
+          <div className="p-1 bg-green-50 rounded flex-shrink-0">
+            <FileText className="w-3.5 h-3.5 text-green-600" />
+          </div>
+
+          {/* 标题 */}
+          <div className="flex-1 min-w-0">
+            {isEditingTitle ? (
+              <input
+                type="text"
+                value={editTitleValue}
+                onChange={(e) => setEditTitleValue(e.target.value)}
+                onBlur={saveTitle}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    saveTitle();
+                  }
+                  if (e.key === 'Escape') {
+                    setEditTitleValue(title);
+                    setIsEditingTitle(false);
+                  }
+                }}
+                className="w-full bg-transparent text-sm font-medium text-gray-900 outline-none border-b border-blue-500"
+                placeholder="输入标题..."
+              />
+            ) : (
+              <div
+                className="flex items-center gap-1 cursor-pointer group"
+                onDoubleClick={() => setIsEditingTitle(true)}
+                data-title-area
+              >
+                <span className="text-sm font-medium text-gray-900 truncate">
+                  {title}
+                </span>
+                <Edit3 className="w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            )}
+
+            {/* 摘录数量 */}
+            <div className="text-xs text-gray-500">
+              {excerpts.length} 条摘录
+              {aiOrganized && (
+                <span className="ml-2 text-green-600">✓ AI 整理</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 右侧操作按钮 */}
+        <div className="flex items-center gap-0.5">
+          {/* AI 对话按钮 */}
+          <button
+            onClick={toggleAiMode}
+            className={cn(
+              "p-1.5 rounded transition-colors",
+              aiMode
+                ? "text-blue-600 bg-blue-50"
+                : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+            )}
+            title={aiMode ? "关闭 AI 对话" : "与 AI 对话"}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+          </button>
+
+          {/* 展开为全屏按钮 */}
+          <button
+            onClick={() => setExpandedNode(id)}
+            className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+            title="展开为全屏查看"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+
+          {/* 菜单按钮 */}
+          <div className="relative">
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+            >
+              <MoreVertical className="w-3.5 h-3.5" />
+            </button>
+
+            {isMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsMenuOpen(false)}
+                />
+                <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-soft z-50 overflow-hidden">
+                  <button
+                    onClick={async () => {
+                      setIsMenuOpen(false);
+                      if (nodeRef.current) {
+                        try {
+                          const dataUrl = await toPng(nodeRef.current, {
+                            quality: 1,
+                            pixelRatio: 2,
+                            backgroundColor: '#1a1a2e',
+                            skipFonts: true,
+                            fontEmbedCSS: '',
+                          });
+                          const link = document.createElement('a');
+                          link.download = `${title || 'note-node'}.png`;
+                          link.href = dataUrl;
+                          link.click();
+                        } catch (err) {
+                          console.error('导出图片失败:', err);
+                        }
+                      }
+                    }}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-[#787774] hover:bg-[#F7F6F3] transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    导出为图片
+                  </button>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(title); setIsMenuOpen(false); }}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-[#787774] hover:bg-[#F7F6F3] transition-colors"
+                  >
+                    复制标题
+                  </button>
+                  <button
+                    onClick={() => { deleteNode(id); setIsMenuOpen(false); }}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-[#E03E3E] hover:bg-[#FEF2F2] transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    删除节点
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+          
+          {/* 折叠按钮 */}
+          <button
+            onClick={() => updateNodeData(id, { collapsed: !collapsed })}
+            className="p-1.5 text-[#787774] hover:text-[#37352F] hover:bg-[#F7F6F3] rounded-lg transition-colors"
+          >
+            {collapsed ? (
+              <ChevronDown className="w-4 h-4" />
+            ) : (
+              <ChevronUp className="w-4 h-4" />
+            )}
+          </button>
+        </div>
+      </div>
+      
+      {/* 摘录列表 - 非折叠状态 */}
+      {!collapsed && (
+        <div 
+          className="px-4 py-3 overflow-y-auto scrollbar-chat"
+          style={{ maxHeight: 500, minHeight: NODE_MIN_HEIGHT }}
+        >
+          {sortedExcerpts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-center py-8">
+              <div className="w-12 h-12 rounded-lg bg-bg-[#F7F6F3] flex items-center justify-center mb-3">
+                <FileText className="w-6 h-6 text-emerald-400/50" />
+              </div>
+              <p className="text-sm text-[#787774] mb-1">暂无摘录内容</p>
+              <p className="text-xs text-[#9B9A97]">在对话节点中选中文本，点击"摘录"添加</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {sortedExcerpts.map((excerpt) => (
+                <ExcerptCard
+                  key={excerpt.id}
+                  excerpt={excerpt}
+                  onJumpToSource={() => handleJumpToSource(excerpt)}
+                  onDelete={() => handleDeleteExcerpt(excerpt.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* AI 对话区域 - 非折叠且开启 AI 模式时显示 */}
+      {!collapsed && aiMode && (
+        <div className="border-t border-bg-[#F7F6F3]">
+          {/* 对话消息列表 */}
+          <div 
+            ref={messagesContainerRef}
+            className="px-4 py-3 overflow-y-auto scrollbar-chat bg-black/20"
+            style={{ maxHeight: 300, minHeight: 100 }}
+          >
+            {messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center py-4">
+                <MessageCircle className="w-8 h-8 text-[#2383E2]/30 mb-2" />
+                <p className="text-sm text-[#787774]">开始与 AI 对话</p>
+                <p className="text-xs text-[#9B9A97] mt-1">
+                  {hasConnectedNodes 
+                    ? `上下文包含 ${contextContent.length} 个笔记节点` 
+                    : '基于当前笔记内容进行对话'
+                  }
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {messages.map((msg) => (
+                  <div 
+                    key={msg.id} 
+                    className={cn(
+                      "flex",
+                      msg.role === 'user' ? "justify-end" : "justify-start"
+                    )}
+                  >
+                    <div className={cn(
+                      "max-w-[85%] px-3 py-2 rounded-lg text-sm",
+                      msg.role === 'user' 
+                        ? "bg-bg-[#F7F6F3] text-amber-100" 
+                        : "bg-white/5 text-[#787774]"
+                    )}>
+                      {msg.role === 'assistant' ? (
+                        <MarkdownRenderer content={msg.content} />
+                      ) : (
+                        <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {isStreaming && (
+                  <div className="flex justify-start">
+                    <div className="bg-white/5 px-3 py-2 rounded-lg">
+                      <div className="flex items-center gap-1.5 text-sm text-[#787774]">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>思考中...</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          
+          {/* 输入区域 */}
+          <div className="px-4 py-3 border-t border-bg-[#F7F6F3] bg-black/10">
+            <div className="flex items-center gap-2">
+              <input
+                ref={inputRef}
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                placeholder="输入你的问题..."
+                disabled={isStreaming}
+                className="flex-1 bg-white/5 border border-bg-[#F7F6F3] rounded-lg px-3 py-2 text-sm text-[#37352F] placeholder-[#C4C4C4] outline-none focus:border-amber-500/40 disabled:opacity-50"
+              />
+              <button
+                onClick={handleSendMessage}
+                disabled={!inputValue.trim() || isStreaming}
+                className={cn(
+                  "p-2 rounded-lg transition-colors",
+                  inputValue.trim() && !isStreaming
+                    ? "bg-bg-[#F7F6F3] text-[#2383E2] hover:bg-bg-[#F7F6F3]"
+                    : "bg-white/5 text-[#9B9A97] cursor-not-allowed"
+                )}
+              >
+                {isStreaming ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+            {/* 上下文提示 */}
+            {hasConnectedNodes && (
+              <div className="mt-2 text-xs text-[#9B9A97] flex items-center gap-1">
+                <Sparkles className="w-3 h-3" />
+                <span>上下文包含 {contextContent.length} 个相连的笔记节点</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* 折叠状态显示 */}
+      {collapsed && (
+        <div className="px-4 py-3">
+          <div className="flex items-center justify-between text-xs text-[#9B9A97]">
+            <span>{excerpts.length} 条摘录</span>
+          </div>
+        </div>
+      )}
+      
+      {/* 选中状态发光效果 */}
+      {selected && (
+        <div className="absolute inset-0 rounded-lg pointer-events-none">
+          <div className="absolute inset-0 rounded-lg bg-emerald-500/5 animate-pulse-soft" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 使用 memo 优化
+export const NoteNode = memo(NoteNodeComponent, (prevProps, nextProps) => {
+  const prevData = prevProps.data as NoteNodeData;
+  const nextData = nextProps.data as NoteNodeData;
+  
+  if (prevProps.selected !== nextProps.selected) return false;
+  
+  if (
+    prevData.title !== nextData.title ||
+    prevData.collapsed !== nextData.collapsed ||
+    prevData.excerpts?.length !== nextData.excerpts?.length
+  ) {
+    return false;
+  }
+  
+  return true;
+});
+NoteNode.displayName = 'NoteNode';

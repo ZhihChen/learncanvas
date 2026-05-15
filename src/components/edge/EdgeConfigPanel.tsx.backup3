@@ -1,0 +1,371 @@
+'use client';
+
+/**
+ * 连线配置面板
+ * 用于配置上下文传递策略
+ */
+
+import { memo, useState, useCallback, useEffect, useRef } from 'react';
+import { 
+  X, 
+  MessageSquare, 
+  Sparkles, 
+  Clock, 
+  Hash,
+  Settings,
+  ChevronDown,
+  Check,
+  AlertCircle,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import type { ContextTransferStrategy, ContextTransferConfig, Message } from '@/types';
+
+interface EdgeConfigPanelProps {
+  edgeId: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  sourceNodeTitle: string;
+  targetNodeTitle: string;
+  sourceMessages: Message[];
+  sourceSummary?: string;
+  currentConfig?: ContextTransferConfig;
+  onSave: (edgeId: string, config: ContextTransferConfig) => void;
+  onDelete: (edgeId: string) => void;
+  onClose: () => void;
+  position: { x: number; y: number };
+}
+
+// 策略选项
+const strategyOptions: Array<{
+  value: ContextTransferStrategy;
+  label: string;
+  description: string;
+  icon: typeof MessageSquare;
+}> = [
+  {
+    value: 'all',
+    label: '全部传递',
+    description: '传递所有对话历史',
+    icon: MessageSquare,
+  },
+  {
+    value: 'summary',
+    label: '智能摘要',
+    description: 'AI生成的内容摘要',
+    icon: Sparkles,
+  },
+  {
+    value: 'recent',
+    label: '最近消息',
+    description: '仅传递最近N条消息',
+    icon: Clock,
+  },
+  {
+    value: 'custom',
+    label: '自定义选择',
+    description: '手动选择要传递的消息',
+    icon: Hash,
+  },
+];
+
+function EdgeConfigPanelComponent({
+  edgeId,
+  sourceNodeId,
+  targetNodeId,
+  sourceNodeTitle,
+  targetNodeTitle,
+  sourceMessages,
+  sourceSummary,
+  currentConfig,
+  onSave,
+  onDelete,
+  onClose,
+  position,
+}: EdgeConfigPanelProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  
+  // 配置状态
+  const [strategy, setStrategy] = useState<ContextTransferStrategy>(currentConfig?.strategy || 'all');
+  const [recentCount, setRecentCount] = useState(currentConfig?.recentCount || 3);
+  const [enabled, setEnabled] = useState(currentConfig?.enabled ?? true);
+  const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>(
+    currentConfig?.customMessageIds || []
+  );
+  const [showStrategyDropdown, setShowStrategyDropdown] = useState(false);
+  
+  // 点击外部关闭
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [onClose]);
+  
+  // 保存配置
+  const handleSave = useCallback(() => {
+    const config: ContextTransferConfig = {
+      strategy,
+      recentCount: strategy === 'recent' ? recentCount : undefined,
+      customMessageIds: strategy === 'custom' ? selectedMessageIds : undefined,
+      enabled,
+    };
+    onSave(edgeId, config);
+    onClose();
+  }, [edgeId, strategy, recentCount, selectedMessageIds, enabled, onSave, onClose]);
+  
+  // 切换消息选择
+  const toggleMessageSelection = useCallback((messageId: string) => {
+    setSelectedMessageIds(prev => 
+      prev.includes(messageId)
+        ? prev.filter(id => id !== messageId)
+        : [...prev, messageId]
+    );
+  }, []);
+  
+  // 预览内容
+  const previewContent = useCallback(() => {
+    switch (strategy) {
+      case 'summary':
+        return sourceSummary || '暂无摘要，将使用最近3条消息';
+      case 'recent':
+        return sourceMessages.slice(-recentCount).map(m => 
+          `${m.role === 'user' ? '👤' : '🤖'} ${m.content.slice(0, 40)}...`
+        ).join('\n') || '暂无消息';
+      case 'custom':
+        return selectedMessageIds.length > 0
+          ? sourceMessages.filter(m => selectedMessageIds.includes(m.id)).map(m =>
+              `${m.role === 'user' ? '👤' : '🤖'} ${m.content.slice(0, 40)}...`
+            ).join('\n')
+          : '请选择要传递的消息';
+      default:
+        return `将传递全部 ${sourceMessages.length} 条消息`;
+    }
+  }, [strategy, recentCount, selectedMessageIds, sourceMessages, sourceSummary]);
+  
+  const currentStrategy = strategyOptions.find(s => s.value === strategy);
+  
+  return (
+    <div
+      ref={panelRef}
+      className={cn(
+        'fixed z-[9999] w-80',
+        'bg-[#F7F6F3]
+        ' border border-amber-500/40',
+        'rounded-lg shadow-lg shadow-bg-[#F7F6F3]',
+        'overflow-hidden',
+      )}
+      style={{ left: position.x, top: position.y }}
+    >
+      {/* 头部 */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-bg-[#F7F6F3] bg-amber-500/5">
+        <div className="flex items-center gap-2">
+          <Settings className="w-4 h-4 text-[#2383E2]" />
+          <span className="text-sm font-medium text-[#37352F]">连线配置</span>
+        </div>
+        <button
+          onClick={onClose}
+          className="p-1 rounded-lg hover:bg-white/10 text-[#9B9A97] hover:text-[#37352F] transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      
+      {/* 内容 */}
+      <div className="p-4 space-y-4">
+        {/* 连线信息 */}
+        <div className="flex items-center gap-2 text-xs text-[#9B9A97]">
+          <span className="truncate max-w-[100px]">{sourceNodeTitle}</span>
+          <svg className="w-4 h-4 text-[#2383E2] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+          </svg>
+          <span className="truncate max-w-[100px]">{targetNodeTitle}</span>
+        </div>
+        
+        {/* 启用开关 */}
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-[#787774]">启用上下文传递</span>
+          <button
+            onClick={() => setEnabled(!enabled)}
+            className={cn(
+              'relative w-10 h-5 rounded-full transition-colors',
+              enabled ? 'bg-amber-500' : 'bg-stone-700'
+            )}
+          >
+            <div className={cn(
+              'absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform',
+              enabled ? 'translate-x-5' : 'translate-x-0.5'
+            )} />
+          </button>
+        </div>
+        
+        {/* 传递策略选择 */}
+        <div className="space-y-2">
+          <label className="text-sm text-[#787774]">传递策略</label>
+          <div className="relative">
+            <button
+              onClick={() => setShowStrategyDropdown(!showStrategyDropdown)}
+              className={cn(
+                'w-full flex items-center justify-between px-3 py-2.5 rounded-lg',
+                'bg-stone-800/50 border border-bg-[#F7F6F3]',
+                'text-sm text-[#37352F] hover:border-amber-500/40 transition-colors'
+              )}
+            >
+              <div className="flex items-center gap-2">
+                {currentStrategy && (
+                  <>
+                    <currentStrategy.icon className="w-4 h-4 text-[#2383E2]" />
+                    <span>{currentStrategy.label}</span>
+                  </>
+                )}
+              </div>
+              <ChevronDown className={cn(
+                'w-4 h-4 text-[#9B9A97] transition-transform',
+                showStrategyDropdown && 'rotate-180'
+              )} />
+            </button>
+            
+            {/* 下拉选项 */}
+            {showStrategyDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 py-1 bg-[#FFFFFF] border border-bg-[#F7F6F3] rounded-lg shadow-md z-10">
+                {strategyOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setStrategy(option.value);
+                      setShowStrategyDropdown(false);
+                    }}
+                    className={cn(
+                      'w-full flex items-center gap-3 px-3 py-2 text-left',
+                      'hover:bg-bg-[#F7F6F3] transition-colors',
+                      strategy === option.value && 'bg-bg-[#F7F6F3]'
+                    )}
+                  >
+                    <option.icon className={cn(
+                      'w-4 h-4',
+                      strategy === option.value ? 'text-[#2383E2]' : 'text-[#9B9A97]'
+                    )} />
+                    <div className="flex-1">
+                      <div className={cn(
+                        'text-sm',
+                        strategy === option.value ? 'text-[#37352F]' : 'text-[#787774]'
+                      )}>
+                        {option.label}
+                      </div>
+                      <div className="text-xs text-[#9B9A97]">{option.description}</div>
+                    </div>
+                    {strategy === option.value && (
+                      <Check className="w-4 h-4 text-[#2383E2]" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* 最近消息数量配置 */}
+        {strategy === 'recent' && (
+          <div className="space-y-2">
+            <label className="text-sm text-[#787774]">传递最近消息数量</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min={1}
+                max={Math.min(10, sourceMessages.length)}
+                value={recentCount}
+                onChange={(e) => setRecentCount(parseInt(e.target.value))}
+                className="flex-1 h-1 bg-stone-700 rounded-full appearance-none cursor-pointer"
+              />
+              <span className="text-sm text-[#2383E2] w-8 text-center">{recentCount}</span>
+            </div>
+          </div>
+        )}
+        
+        {/* 自定义消息选择 */}
+        {strategy === 'custom' && sourceMessages.length > 0 && (
+          <div className="space-y-2">
+            <label className="text-sm text-[#787774]">选择要传递的消息</label>
+            <div className="max-h-40 overflow-y-auto space-y-1">
+              {sourceMessages.map((msg) => (
+                <button
+                  key={msg.id}
+                  onClick={() => toggleMessageSelection(msg.id)}
+                  className={cn(
+                    'w-full flex items-start gap-2 p-2 rounded-lg text-left',
+                    'border transition-colors',
+                    selectedMessageIds.includes(msg.id)
+                      ? 'border-amber-500/50 bg-bg-[#F7F6F3]'
+                      : 'border-stone-700/50 hover:border-slate-600'
+                  )}
+                >
+                  <div className={cn(
+                    'w-4 h-4 rounded flex-shrink-0 mt-0.5 flex items-center justify-center',
+                    selectedMessageIds.includes(msg.id)
+                      ? 'bg-amber-500'
+                      : 'border border-slate-600'
+                  )}>
+                    {selectedMessageIds.includes(msg.id) && (
+                      <Check className="w-3 h-3 text-[#37352F]" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-[#9B9A97] mb-0.5">
+                      {msg.role === 'user' ? '👤 用户' : '🤖 AI'}
+                    </div>
+                    <div className="text-xs text-[#787774] line-clamp-2">{msg.content}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {/* 预览 */}
+        <div className="space-y-2">
+          <label className="text-sm text-[#787774]">传递内容预览</label>
+          <div className="p-3 rounded-lg bg-slate-900/50 border border-stone-700/30">
+            <p className="text-xs text-[#9B9A97] leading-relaxed whitespace-pre-wrap line-clamp-4">
+              {previewContent()}
+            </p>
+          </div>
+        </div>
+        
+        {/* 消息统计 */}
+        <div className="flex items-center gap-2 text-xs text-[#9B9A97]">
+          <MessageSquare className="w-3 h-3" />
+          <span>共 {sourceMessages.length} 条消息可传递</span>
+        </div>
+      </div>
+      
+      {/* 底部操作 */}
+      <div className="flex items-center gap-2 px-4 py-3 border-t border-bg-[#F7F6F3] bg-slate-900/30">
+        <button
+          onClick={() => onDelete(edgeId)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-[#E03E3E] hover:bg-[#FEF2F2] transition-colors"
+        >
+          <X className="w-3.5 h-3.5" />
+          删除连线
+        </button>
+        <div className="flex-1" />
+        <button
+          onClick={onClose}
+          className="px-3 py-1.5 rounded-lg text-sm text-[#9B9A97] hover:bg-[#F7F6F3] transition-colors"
+        >
+          取消
+        </button>
+        <button
+          onClick={handleSave}
+          className="px-4 py-1.5 rounded-lg text-sm bg-amber-500 hover:bg-indigo-600 text-[#37352F] transition-colors"
+        >
+          保存
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export const EdgeConfigPanel = memo(EdgeConfigPanelComponent);

@@ -1,0 +1,582 @@
+/* ==================== Connection Handles ==================== */
+
+/* 扩大连接点的可点击区域，但保持视觉上的小点 */
+.react-flow__handle {
+  width: 20px !important;
+  height: 20px !important;
+  background: transparent !important;
+  border: none !important;
+  position: absolute;
+  cursor: crosshair;
+}
+
+/* 根据不同方向设置正确的 transform，避免连接点偏移到节点内部 */
+.react-flow__handle-top {
+  transform: translate(-50%, -50%);
+}
+
+.react-flow__handle-bottom {
+  transform: translate(-50%, 50%);
+}
+
+.react-flow__handle-left {
+  transform: translate(-50%, -50%);
+}
+
+.react-flow__handle-right {
+  transform: translate(50%, -50%);
+}
+
+/* 连接点的视觉样式 - 使用伪元素创建可见的小点 */
+.react-flow__handle::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 6px;
+  height: 6px;
+  background: var(--accent-primary);
+  border-radius: 50%;
+  opacity: 0.6;
+  transition: all var(--transition-smooth);
+}
+
+/* 连接点 hover 效果 */
+.react-flow__handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  background: var(--accent-primary);
+  border-radius: 50%;
+  opacity: 0;
+  transition: all var(--transition-smooth);
+  pointer-events: none;
+}
+
+/* 激活状态 - 鼠标悬停或连接时 */
+.react-flow__handle.react-flow__handle-valid {
+  background: transparent !important;
+  border: none !important;
+}
+
+.react-flow__handle.react-flow__handle-valid::before {
+  opacity: 0.8;
+  transform: translate(-50%, -50%) scale(1.2);
+}
+
+.react-flow__handle.react-flow__handle-valid::after {
+  opacity: 0.15;
+}
+
+/* 连接中的状态 */
+.react-flow__handle.connecting {
+  background: transparent !important;
+  border: none !important;
+}
+
+.react-flow__handle.connecting::before {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.3);
+  background: var(--accent-primary);
+}
+
+.react-flow__handle.connecting::after {
+  opacity: 0.2;
+  animation: pulse-handle 1s ease-in-out infinite;
+}
+
+/* 目标节点的输入端口高亮 */
+.react-flow__handle-connectable {
+  cursor: crosshair;
+}
+
+/* ==================== Node Container ==================== */
+.node-container {
+  background: var(--node-bg);
+  border: 1px solid var(--node-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--node-shadow);
+  min-width: 280px;
+  max-width: 400px;
+  transition: all var(--transition-smooth) cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: var(--font-noto-sans);
+  overflow: visible; /* Changed from hidden to visible for handles */
+  position: relative;
+}
+
+/* Subtle glow on top */
+.node-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(99, 102, 241, 0.2) 50%,
+    transparent 100%);
+  opacity: 0;
+  transition: opacity var(--transition-normal);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  overflow: hidden;
+}
+
+.node-container:hover {
+  border-color: var(--node-border-hover);
+  box-shadow: var(--node-shadow-hover);
+  transform: translateY(-4px) scale(1.02);
+}
+
+.node-container:hover::before {
+  opacity: 1;
+}
+
+/* 添加光泽效果 */
+.node-container::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  transition: left 0.6s ease;
+  opacity: 0;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.node-container:hover::after {
+  left: 200%;
+  opacity: 1;
+  animation: shimmer 1.5s ease-in-out;
+}
+
+.node-container.selected {
+  border-color: var(--node-border-selected);
+  background: var(--node-bg-selected);
+  box-shadow: var(--node-shadow-selected);
+}
+
+/* Enhanced glow when selected */
+.node-container.selected::before {
+  opacity: 1;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(99, 102, 241, 0.3) 50%,
+    transparent 100%);
+}
+
+/* ==================== Node Header ==================== */
+.node-header {
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  background: linear-gradient(180deg,
+    rgba(255, 255, 255, 0.9) 0%,
+    rgba(255, 249, 245, 0.6) 100%);
+  min-height: 40px;
+}
+
+.node-title {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: var(--leading-snug);
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-noto-sans);
+}
+
+.node-title-icon {
+  color: var(--accent-primary);
+  flex-shrink: 0;
+  transition: color var(--transition-normal);
+}
+
+.node-container:hover .node-title-icon {
+  color: var(--accent-hover);
+}
+
+.node-title-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.node-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  opacity: 0;
+  transition: opacity var(--transition-smooth);
+}
+
+.node-container:hover .node-actions {
+  opacity: 1;
+}
+
+.node-action-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-smooth);
+}
+
+.node-action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  transform: scale(1.1);
+}
+
+.node-action-btn:active {
+  background: var(--bg-active);
+  transform: scale(0.95);
+}
+
+/* ==================== 节点内容 ==================== */
+.node-content {
+  padding: var(--space-3);
+  background: var(--node-bg);
+}
+
+.node-description {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  line-height: var(--leading-normal);
+  margin-bottom: var(--space-3);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ==================== Tags ==================== */
+.node-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.node-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  line-height: var(--leading-snug);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  transition: all var(--transition-smooth);
+  font-family: var(--font-noto-sans);
+}
+
+.node-tag:hover {
+  background: var(--bg-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
+.node-tag-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Context tag */
+.node-tag-context {
+  background: rgba(232, 121, 90, 0.08);
+  color: var(--accent-primary);
+  border-color: rgba(232, 121, 90, 0.15);
+}
+
+.node-tag-context .node-tag-dot {
+  background: var(--accent-primary);
+}
+
+/* Idea tag */
+.node-tag-idea {
+  background: rgba(255, 159, 122, 0.08);
+  color: #FF7F5F;
+  border-color: rgba(255, 159, 122, 0.15);
+}
+
+.node-tag-idea .node-tag-dot {
+  background: #FF7F5F;
+}
+
+/* Extract tag */
+.node-tag-extract {
+  background: rgba(45, 206, 137, 0.08);
+  color: #2DCE89;
+  border-color: rgba(45, 206, 137, 0.15);
+}
+
+.node-tag-extract .node-tag-dot {
+  background: #2DCE89;
+}
+
+/* ==================== 输入区域 ==================== */
+.node-input-area {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-primary);
+}
+
+.node-input-placeholder {
+  font-size: var(--text-sm);
+  color: var(--text-disabled);
+  line-height: var(--leading-normal);
+  padding: var(--space-2) 0;
+  cursor: text;
+  transition: color var(--transition-fast) ease;
+}
+
+.node-input-placeholder:hover {
+  color: var(--text-tertiary);
+}
+
+.node-input-wrapper {
+  position: relative;
+}
+
+.node-input {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  line-height: var(--leading-normal);
+  outline: none;
+  transition: all var(--transition-fast) ease;
+  font-family: var(--font-sans);
+  resize: none;
+}
+
+.node-input::placeholder {
+  color: var(--text-disabled);
+}
+
+.node-input:hover {
+  border-color: var(--border-secondary);
+}
+
+.node-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px rgba(35, 131, 226, 0.1);
+}
+
+.node-input-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+/* ==================== ChatNode 特有样式 ==================== */
+.chat-messages {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: var(--space-3);
+  padding-right: var(--space-2);
+}
+
+.chat-message {
+  margin-bottom: var(--space-3);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  line-height: var(--leading-normal);
+  font-size: var(--text-sm);
+}
+
+.chat-message.user {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  text-align: right;
+}
+
+.chat-message.assistant {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.chat-message-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chat-input-area {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.chat-input-guide {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+}
+
+.chat-input-guide-icon {
+  color: #D9730D;
+}
+
+/* ==================== NoteNode 特有样式 ==================== */
+.note-content-area {
+  min-height: 60px;
+  margin-bottom: var(--space-3);
+}
+
+.note-content {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  line-height: var(--leading-normal);
+  font-family: var(--font-sans);
+  resize: none;
+  min-height: 60px;
+}
+
+.note-content::placeholder {
+  color: var(--text-disabled);
+}
+
+.note-content:focus {
+  outline: none;
+}
+
+.note-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-primary);
+}
+
+/* ==================== 状态指示器 ==================== */
+.node-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.node-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.node-status-dot.idle {
+  background: var(--text-tertiary);
+}
+
+.node-status-dot.processing {
+  background: var(--accent-primary);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.node-status-dot.success {
+  background: var(--color-success);
+}
+
+.node-status-dot.error {
+  background: var(--color-danger);
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ==================== 折叠状态 ==================== */
+.node-container.collapsed {
+  max-width: 200px;
+}
+
+.node-container.collapsed .node-content,
+.node-container.collapsed .node-input-area {
+  display: none;
+}
+
+/* ==================== 最大化状态 ==================== */
+.node-container.maximized {
+  max-width: 600px;
+  min-width: 400px;
+}
+
+/* ==================== 滚动条 ==================== */
+.chat-messages::-webkit-scrollbar {
+  width: 4px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: var(--border-secondary);
+  border-radius: var(--radius-sm);
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* ==================== 响应式 ==================== */
+@media (max-width: 768px) {
+  .node-container {
+    min-width: 240px;
+    max-width: 320px;
+  }
+
+  .node-container.maximized {
+    max-width: 400px;
+    min-width: 320px;
+  }
+}

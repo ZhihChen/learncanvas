@@ -1,0 +1,364 @@
+'use client';
+
+/**
+ * 节点分组组件
+ * 支持四个方向连接点
+ */
+
+import { memo, useState, useCallback } from 'react';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { 
+  Folder, 
+  FolderOpen,
+  MoreVertical,
+  Trash2,
+  Edit3,
+  ChevronDown,
+  ChevronRight,
+  Plus,
+} from 'lucide-react';
+import { useCanvasStore } from '@/store/canvasStore';
+import { cn } from '@/lib/utils';
+
+// 分组颜色主题
+const groupThemes = {
+  indigo: {
+    bg: 'from-[var(--node-bg)] to-[var(--accent-primary)]/5',
+    border: 'border-[var(--border-light)]',
+    accent: 'bg-[var(--accent-primary)]',
+    text: 'text-[var(--accent-primary)]',
+  },
+  purple: {
+    bg: 'from-[var(--node-bg)] to-[var(--accent-lavender)]/5',
+    border: 'border-[var(--border-light)]',
+    accent: 'bg-[var(--accent-lavender)]',
+    text: 'text-[var(--accent-lavender)]',
+  },
+  teal: {
+    bg: 'from-[var(--node-bg)] to-[var(--accent-mint)]/5',
+    border: 'border-[var(--border-light)]',
+    accent: 'bg-[var(--accent-mint)]',
+    text: 'text-[var(--accent-mint)]',
+  },
+  amber: {
+    bg: 'from-[var(--node-bg)] to-[var(--accent-amber)]/5',
+    border: 'border-[var(--border-light)]',
+    accent: 'bg-[var(--accent-amber)]',
+    text: 'text-[var(--accent-amber)]',
+  },
+  rose: {
+    bg: 'from-[var(--node-bg)] to-[var(--accent-pink)]/5',
+    border: 'border-[var(--border-light)]',
+    accent: 'bg-[var(--accent-pink)]',
+    text: 'text-[var(--accent-pink)]',
+  },
+};
+
+type GroupTheme = keyof typeof groupThemes;
+
+type GroupNodeProps = NodeProps & {
+  data: {
+    title: string;
+    collapsed?: boolean;
+    theme?: GroupTheme;
+    childNodes?: string[];
+    description?: string;
+  };
+};
+
+function GroupNodeComponent({ id, data, selected }: GroupNodeProps) {
+  const { title, collapsed, theme = 'indigo', childNodes = [], description } = data;
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(title);
+  
+  const { updateNodeData, deleteNode, addNode, nodes } = useCanvasStore();
+  
+  const themeStyles = groupThemes[theme];
+  
+  // 统计子节点
+  const childCount = childNodes.length;
+  const completedCount = nodes.filter(
+    (n) => childNodes.includes(n.id) && n.data.status === 'completed'
+  ).length;
+  
+  // 切换折叠状态
+  const toggleCollapse = useCallback(() => {
+    updateNodeData(id, { collapsed: !collapsed });
+  }, [id, collapsed, updateNodeData]);
+  
+  // 保存标题
+  const saveTitle = useCallback(() => {
+    const trimmed = editValue.trim();
+    if (trimmed && trimmed !== title) {
+      updateNodeData(id, { title: trimmed });
+    } else {
+      setEditValue(title);
+    }
+    setIsEditing(false);
+  }, [id, editValue, title, updateNodeData]);
+  
+  // 在分组内添加新节点
+  const addNodeToGroup = useCallback(() => {
+    const groupNode = nodes.find((n) => n.id === id);
+    if (groupNode) {
+      const newNodeId = addNode(
+        { 
+          x: groupNode.position.x + 50, 
+          y: groupNode.position.y + 100 + (childNodes.length * 50) 
+        },
+        '新对话'
+      );
+      updateNodeData(id, { childNodes: [...childNodes, newNodeId] });
+    }
+    setIsMenuOpen(false);
+  }, [id, nodes, childNodes, addNode, updateNodeData]);
+  
+  // 切换主题
+  const cycleTheme = useCallback(() => {
+    const themes: GroupTheme[] = ['indigo', 'purple', 'teal', 'amber', 'rose'];
+    const currentIndex = themes.indexOf(theme);
+    const nextTheme = themes[(currentIndex + 1) % themes.length];
+    updateNodeData(id, { theme: nextTheme });
+    setIsMenuOpen(false);
+  }, [id, theme, updateNodeData]);
+  
+  return (
+    <div
+      className={cn(
+        'relative bg-gradient-to-br  rounded-lg border shadow-lg',
+        'transition-all duration-300 ease-out overflow-hidden',
+        themeStyles.bg,
+        selected ? themeStyles.border : 'border-transparent hover:border-white/10',
+        collapsed ? 'min-h-0' : ''
+      )}
+      style={{ 
+        width: collapsed ? 280 : 450,
+        minHeight: collapsed ? 56 : 200,
+      }}
+    >
+      {/* 背景装饰 */}
+      <div className="absolute inset-0 bg-[#F7F6F3] pointer-events-none" />
+      
+      {/* ===== 四个方向的连接点 ===== */}
+      
+      {/* 顶部输入端口 */}
+      <Handle
+        type="target"
+        position={Position.Top}
+        id="top-target"
+        className="!w-3 !h-3 !bg-purple-500/50 !border !border-purple-300/50"
+        style={{ top: -6 }}
+      />
+      
+      {/* 底部输出端口 */}
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id="bottom-source"
+        className="!w-3 !h-3 !bg-purple-500/50 !border !border-purple-300/50"
+        style={{ bottom: -6 }}
+      />
+      
+      {/* 左侧输入端口 */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="left-target"
+        className="!w-3 !h-3 !bg-indigo-500/50 !border !border-indigo-300/50"
+        style={{ left: -6 }}
+      />
+      
+      {/* 右侧输出端口 */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="right-source"
+        className="!w-3 !h-3 !bg-indigo-500/50 !border !border-indigo-300/50"
+        style={{ right: -6 }}
+      />
+      
+      {/* 头部 */}
+      <div className="relative flex items-center justify-between px-4 py-3">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          {/* 折叠按钮 */}
+          <button
+            onClick={toggleCollapse}
+            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+          >
+            {collapsed ? (
+              <ChevronRight className="w-4 h-4 text-[#787774]" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-[#787774]" />
+            )}
+          </button>
+          
+          {/* 图标 */}
+          <div className={cn('p-2 rounded-lg', themeStyles.accent, 'bg-opacity-20')}>
+            {collapsed ? (
+              <Folder className={cn('w-5 h-5', themeStyles.text)} />
+            ) : (
+              <FolderOpen className={cn('w-5 h-5', themeStyles.text)} />
+            )}
+          </div>
+          
+          {/* 标题 */}
+          <div className="flex-1 min-w-0">
+            {isEditing ? (
+              <input
+                type="text"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onBlur={saveTitle}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') saveTitle();
+                  if (e.key === 'Escape') { setEditValue(title); setIsEditing(false); }
+                }}
+                className="w-full bg-transparent text-sm font-medium text-[#37352F] outline-none border-b border-white/30"
+                autoFocus
+              />
+            ) : (
+              <div 
+                className="flex items-center gap-2 cursor-pointer group"
+                onDoubleClick={() => setIsEditing(true)}
+              >
+                <span className="text-sm font-medium text-[#37352F] truncate">
+                  {title}
+                </span>
+                <Edit3 className="w-3 h-3 text-[#9B9A97] opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            )}
+            
+            {/* 统计信息 */}
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-xs text-[#787774]">
+                {childCount} 个节点
+              </span>
+              {completedCount > 0 && (
+                <>
+                  <span className="text-xs text-[#9B9A97]">·</span>
+                  <span className="text-xs text-[#0F7B6C]">
+                    {completedCount} 已完成
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        {/* 操作按钮 */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={addNodeToGroup}
+            className={cn(
+              'p-1.5 rounded-lg transition-colors',
+              'text-[#787774] hover:text-[#37352F] hover:bg-white/10'
+            )}
+            title="添加节点"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+          
+          <div className="relative">
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="p-1.5 rounded-lg text-[#787774] hover:text-[#37352F] hover:bg-white/10 transition-colors"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+            
+            {isMenuOpen && (
+              <>
+                <div 
+                  className="fixed inset-0 z-40" 
+                  onClick={() => setIsMenuOpen(false)}
+                />
+                <div className="absolute right-0 top-full mt-1 w-40 bg-[#FFFFFF] border border-white/10 rounded-lg shadow-md z-50 overflow-hidden">
+                  <button
+                    onClick={cycleTheme}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-[#787774] hover:bg-[#F7F6F3] transition-colors"
+                  >
+                    <div className={cn('w-3 h-3 rounded-full', themeStyles.accent)} />
+                    切换颜色
+                  </button>
+                  <button
+                    onClick={() => { deleteNode(id); setIsMenuOpen(false); }}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-[#E03E3E] hover:bg-[#FEF2F2] transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    删除分组
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+      
+      {/* 描述 */}
+      {description && !collapsed && (
+        <div className="px-4 pb-2">
+          <p className="text-xs text-[#787774]">{description}</p>
+        </div>
+      )}
+      
+      {/* 内容区域（折叠时隐藏） */}
+      {!collapsed && (
+        <div 
+          className="relative px-4 pb-4 pt-2"
+          style={{ minHeight: 120 }}
+        >
+          {/* 放置提示 */}
+          {childCount === 0 && (
+            <div className="flex flex-col items-center justify-center h-24 border border-dashed border-white/10 rounded-lg">
+              <p className="text-xs text-[#9B9A97]">拖入节点或点击 + 添加</p>
+            </div>
+          )}
+          
+          {/* 子节点列表预览 */}
+          {childCount > 0 && (
+            <div className="space-y-2">
+              {childNodes.map((childId) => {
+                const childNode = nodes.find((n) => n.id === childId);
+                if (!childNode) return null;
+                
+                return (
+                  <div
+                    key={childId}
+                    className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-lg"
+                  >
+                    <div className={cn(
+                      'w-2 h-2 rounded-full',
+                      childNode.data.status === 'completed' ? 'bg-green-500' :
+                      childNode.data.status === 'active' ? 'bg-indigo-500' : 'bg-slate-500'
+                    )} />
+                    <span className="text-xs text-[#787774] truncate flex-1">
+                      {childNode.data.title || '未命名'}
+                    </span>
+                    <span className="text-xs text-[#9B9A97]">
+                      {childNode.data.messages?.length || 0} 条消息
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* 底部进度条 */}
+      {!collapsed && childCount > 0 && completedCount > 0 && (
+        <div className="px-4 pb-3">
+          <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+            <div 
+              className={cn('h-full rounded-full transition-all', themeStyles.accent)}
+              style={{ width: `${(completedCount / childCount) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export const GroupNode = memo(GroupNodeComponent);
