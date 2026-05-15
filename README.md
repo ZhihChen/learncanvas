@@ -9,6 +9,9 @@
 
 ---
 
+<img width="1921" height="1454" alt="image" src="https://github.com/user-attachments/assets/ee40d7ab-7f1f-4405-94dc-cda05889f7a4" />
+
+
 ## 功能特性
 
 ### 核心功能
